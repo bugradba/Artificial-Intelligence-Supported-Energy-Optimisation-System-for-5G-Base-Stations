@@ -56,32 +56,56 @@ class PIM_Core:
         energy_pj = self.power_mw * self.delay_ns
 
         return result, energy_pj, self.delay_ns
+    
+    def mac_8bit(self, a_8bit, b_8bit, accumulator=0, precision=8):
+        """
+        8-bit Multiply-Accumulate işlemi.
+        """
+        total_energy = 0
+        total_latency = 0
+        result = 0 # Başlangıç değeri
 
-    def multiply_8bit_approx_4bit(self, a, b):
-        """
-        8-bit sayıları 4-bit LUT ile yaklaşık çarpma.
-        """
-        # Sayıları 4-bit parçalara böl
-        a_high = (a >> 4) & 0xF  # Üst 4 bit
-        a_low = a & 0xF          # Alt 4 bit
-        b_high = (b >> 4) & 0xF
-        b_low = b & 0xF
+        if precision == 8:
+            # 8-bit tam hassasiyet
+            aH, aL = (a_8bit >> 4) & 0xF, a_8bit & 0xF
+            bH, bL = (b_8bit >> 4) & 0xF, b_8bit & 0xF
+            
+            # Stage 1-4: Partial products
+            V0, e0, l0 = self.cores[0].multiply_4bit(aL, bL)
+            V1, e1, l1 = self.cores[1].multiply_4bit(aL, bH)
+            V2, e2, l2 = self.cores[2].multiply_4bit(aH, bL)
+            V3, e3, l3 = self.cores[3].multiply_4bit(aH, bH)
+            
+            # Stage 5-8: Accumulation
+            # BURADA int() KULLANARAK TAŞMAYI ENGELLİYORUZ
+            result = int(V0) + (int(V1) << 4) + (int(V2) << 4) + (int(V3) << 8)
+            result += accumulator
+            
+            total_energy = (e0 + e1 + e2 + e3) + (5 * self.cores[0].power_mw * 0.8)
+            total_latency = self.mac_delay_ns
+            
+        elif precision == 4:
+            # 4-bit precision scaling (Approximate)
+            aH = (a_8bit >> 4) & 0xF
+            bH = (b_8bit >> 4) & 0xF
+            
+            # Çarpma işlemi
+            V3, e3, l3 = self.cores[0].multiply_4bit(aH, bH)
+            
+            # --- DÜZELTME BURADA ---
+            # V3 numpy.uint8 tipinde olduğu için shift edilince 0 oluyordu.
+            # int(V3) diyerek onu normal sayıya çevirip öyle kaydırıyoruz.
+            result = (int(V3) << 8) + accumulator 
+            
+            total_energy = e3 + (self.cores[0].power_mw * 0.8)
+            total_latency = 3.2 # Daha kısa pipeline
+            
+        else:
+            raise ValueError("Precision 4 veya 8 olmalı")
+        
+        return int(result) & 0xFFFF, total_energy, total_latency
+
     
-        # DÜZELTME: Aşağıdaki satırların girintisi düzeltildi
-        # 4 adet 4-bit çarpma (LUT kullanarak)
-        V0, e0, l0 = self.multiply_4bit(a_low, b_low)
-        V1, e1, l1 = self.multiply_4bit(a_low, b_high)
-        V2, e2, l2 = self.multiply_4bit(a_high, b_low)
-        V3, e3, l3 = self.multiply_4bit(a_high, b_high)
-    
-        # Sonuçları birleştir
-        result = int(V0) + (int(V1) << 4) + (int(V2) << 4) + (int(V3) << 8)
-    
-        # Toplam enerji ve gecikme
-        total_energy = e0 + e1 + e2 + e3
-        total_latency = max(l0, l1, l2, l3) 
-    
-        return result, total_energy, total_latency
 
 class PIMCluster():
     """
@@ -156,7 +180,8 @@ class PIMCluster():
              
              # Tek çarpma + tek toplama yeter
              V3, e3, l3 = self.cores[0].multiply_4bit(aH, bH)
-             result = (V3 << 8) + accumulator
+             result = (int(V3) << 8) + accumulator
+
             
             # Enerji: 1 multiply + 1 add (papPIM: A Programmable Processor-in-Memory Architecture 
             # With Precision-Scaling for Deep Learning per'da 1.35x tasarruf)
@@ -271,6 +296,123 @@ class PIMArray:
             'avg_power_mw': total_energy / (total_latency / 1000) if total_latency > 0 else 0,
             'precision': precision
         }
+    
+class HybridSystem:
+    """
+    PIM + GPU Hibrit Sistemi
+    - Küçük/tekrarlayan işlemler → PIM (enerji tasarrufu)
+    - Büyük/karmaşık işlemler → GPU (hız)
+    """
+    
+    def __init__(self, pim_cluster, gpu_baseline):
+        self.pim = pim_cluster
+        self.gpu = gpu_baseline
+        self.threshold_size = 1000000  # 1M işlem üstü GPU'ya
+        
+    def adaptive_processing(self, workload_size, data):
+        """
+        İş yükü boyutuna göre otomatik seçim
+        
+        Args:
+            workload_size: İşlem sayısı
+            data: İşlenecek veri
+            
+        Returns:
+            result: İşlem sonucu
+            energy: Harcanan enerji (mJ)
+            latency: Toplam gecikme (ms)
+            decision: "PIM" veya "GPU" veya "HYBRID"
+        """
+        
+        # Küçük iş yükü → Sadece PIM
+        if workload_size < self.threshold_size * 0.1:
+            result = self._process_on_pim(workload_size)
+            decision = "PIM"
+            
+        # Orta iş yükü → Hibrit (paralel)
+        elif workload_size < self.threshold_size:
+            result = self._process_hybrid(workload_size)
+            decision = "HYBRID"
+            
+        # Büyük iş yükü → Sadece GPU
+        else:
+            result = self._process_on_gpu(workload_size)
+            decision = "GPU"
+            
+        return result['energy'], result['latency'], decision
+    
+    def _process_on_pim(self, workload):
+        """Sadece PIM'de işle"""
+        ops_per_core = workload // len(self.pim.cores)
+        
+        # Her core'da paralel işlem
+        total_energy = 0
+        max_latency = 0
+        
+        for core in self.pim.cores:
+            # Basit çarpma örneği
+            _, energy, latency = core.multiply(15, 15)
+            total_energy += energy * ops_per_core
+            max_latency = max(max_latency, latency * ops_per_core)
+        
+        # pJ → mJ, ns → ms
+        return {
+            'energy': total_energy / 1e9,
+            'latency': max_latency / 1e6
+        }
+    
+    def _process_on_gpu(self, workload):
+        """Sadece GPU'da işle"""
+        gpu_result = self.gpu.process(workload)
+        return {
+            'energy': gpu_result['energy'],
+            'latency': gpu_result['latency']
+        }
+    
+    def _process_hybrid(self, workload):
+        """
+        Hibrit işleme: İş yükünü böl
+        - %70 PIM'de (enerji-verimli basit işlemler)
+        - %30 GPU'da (karmaşık işlemler)
+        """
+        pim_workload = int(workload * 0.7)
+        gpu_workload = int(workload * 0.3)
+        
+        pim_result = self._process_on_pim(pim_workload)
+        gpu_result = self._process_on_gpu(gpu_workload)
+        
+        # Paralel çalışma varsayımı (max latency)
+        return {
+            'energy': pim_result['energy'] + gpu_result['energy'],
+            'latency': max(pim_result['latency'], gpu_result['latency'])
+        }
+    
+    def benchmark_comparison(self, workload_sizes=[1000, 100000, 10000000]):
+        """Farklı iş yükleri için karşılaştırma"""
+        results = []
+        
+        for size in workload_sizes:
+            # PIM-only
+            pim_res = self._process_on_pim(size)
+            
+            # GPU-only
+            gpu_res = self._process_on_gpu(size)
+            
+            # Hibrit
+            energy, latency, decision = self.adaptive_processing(size, None)
+            
+            results.append({
+                'workload': size,
+                'pim_energy': pim_res['energy'],
+                'pim_latency': pim_res['latency'],
+                'gpu_energy': gpu_res['energy'],
+                'gpu_latency': gpu_res['latency'],
+                'hybrid_energy': energy,
+                'hybrid_latency': latency,
+                'decision': decision
+            })
+        
+        return results
 
 
 

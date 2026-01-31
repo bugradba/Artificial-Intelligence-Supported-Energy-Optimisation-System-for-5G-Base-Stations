@@ -121,12 +121,12 @@ class AdaptiveQLearningScheduler:
                         latency_pim, latency_gpu, 
                         chosen_action, deadline_ms=None):
         """
-        Reward fonksiyonu: enerji tasarrufu - gecikme cezası (BALANCED)
+        Reward fonksiyonu: enerji tasarrufu - gecikme cezası
         
         Reward yapısı:
-        - Enerji tasarrufu: pozitif reward (0-100)
-        - Deadline ihlali: büyük negatif reward (-100)
-        - Göreceli yavaşlık: küçük ceza (-20)
+        - Enerji tasarrufu: pozitif reward
+        - Deadline ihlali: büyük negatif reward
+        - Gereksiz yavaşlık: küçük negatif reward
         
         Args:
             energy_pim, energy_gpu: PIM ve GPU enerjisi (mJ)
@@ -135,7 +135,7 @@ class AdaptiveQLearningScheduler:
             deadline_ms: Gecikme kısıtı
         
         Returns:
-            reward: Toplam reward değeri (-100 ~ +100)
+            reward: Toplam reward değeri
         """
         # Seçilen aksiyonun maliyetleri
         if chosen_action == 'PIM':
@@ -148,32 +148,29 @@ class AdaptiveQLearningScheduler:
             actual_energy = (energy_pim * 0.7 + energy_gpu * 0.3)
             actual_latency = max(latency_pim * 0.7, latency_gpu * 0.3)
         
-        # Enerji tasarrufu (GPU baseline'a göre) → 0 to 100
-        if energy_gpu > 0:
-            energy_saving_ratio = (energy_gpu - actual_energy) / energy_gpu
-            energy_reward = energy_saving_ratio * 100  # 0-100 arasında
-        else:
-            energy_reward = 0
+        # Enerji tasarrufu (GPU baseline'a göre)
+        energy_saving = (energy_gpu - actual_energy) / energy_gpu
+        energy_reward = energy_saving * self.energy_weight * 100
         
         # Gecikme cezası
         latency_penalty = 0
         
-        if deadline_ms is not None and deadline_ms > 0:
+        if deadline_ms is not None:
             if actual_latency > deadline_ms:
-                # Deadline ihlali: Sabit büyük ceza
-                latency_penalty = 100  # Sabit -100
+                # Deadline ihlali: büyük ceza
+                violation_ratio = (actual_latency - deadline_ms) / deadline_ms
+                latency_penalty = violation_ratio * 200  # Büyük ceza
             else:
-                # Deadline içinde: küçük bonus
-                latency_penalty = -10  # +10 bonus
+                # Deadline içinde ama ne kadar hızlı?
+                # GPU'dan ne kadar yavaş?
+                slowdown = (actual_latency - latency_gpu) / latency_gpu
+                latency_penalty = slowdown * self.latency_weight * 50
         else:
-            # Deadline yok: göreceli yavaşlık cezası (küçük)
-            if latency_gpu > 0:
-                slowdown_ratio = (actual_latency - latency_gpu) / latency_gpu
-                latency_penalty = min(20, max(0, slowdown_ratio * 10))  # 0-20 ceza
-            else:
-                latency_penalty = 0
+            # Deadline yok, sadece göreceli yavaşlığa bak
+            slowdown = (actual_latency - latency_gpu) / latency_gpu
+            latency_penalty = slowdown * self.latency_weight * 30
         
-        # Toplam reward: -100 ~ +110 arası
+        # Toplam reward
         reward = energy_reward - latency_penalty
         
         return reward
@@ -206,7 +203,7 @@ class AdaptiveQLearningScheduler:
         self.reward_history.append(reward)
         self.total_reward += reward
     
-    # ⬇️ ÖNEMLİ: Bu fonksiyonlar update_q_table ile AYNI SEVİYEDE olmalı!
+    # ⬇ ÖNEMLİ: Bu fonksiyonlar update_q_table ile AYNI SEVİYEDE olmalı!
     def train_episode(self, pim_simulator, gpu_simulator, workload_data):
         """
         Bir eğitim episode'u çalıştır.
@@ -308,7 +305,7 @@ class AdaptiveQLearningScheduler:
         with open(filepath, 'w') as f:
             json.dump(model_data, f, indent=2)
         
-        print(f"✅ Model kaydedildi: {filepath}")
+        print(f"✅Model kaydedildi: {filepath}")
     
     def load_model(self, filepath='q_learning_model.json'):
         """Q-table'ı yükle"""
@@ -329,14 +326,14 @@ class AdaptiveQLearningScheduler:
         self.energy_weight = hyper['energy_weight']
         self.latency_weight = hyper['latency_weight']
         
-        print(f"✅ Model yüklendi: {filepath}")
+        print(f" Model yüklendi: {filepath}")
         print(f"   Q-table boyutu: {len(self.q_table)} state")
         print(f"   Epsilon: {self.epsilon:.3f}")
 
 
 # Kullanım örneği (standalone test)
 if __name__ == "__main__":
-    print("🧠 Q-Learning Scheduler Demo")
+    print(" Q-Learning Scheduler Demo")
     print("="*60)
     
     # Scheduler oluştur
@@ -357,13 +354,13 @@ if __name__ == "__main__":
     ]
     
     # 10 episode eğit
-    print("\n🎓 Q-Learning Eğitimi Başlıyor...")
+    print("\n Q-Learning Eğitimi Başlıyor...")
     for episode in range(10):
         reward = scheduler.train_episode(None, None, training_workloads * 5)
         print(f"Episode {episode+1}: Reward = {reward:.2f}, Epsilon = {scheduler.epsilon:.3f}")
     
     # İstatistikler
-    print("\n📊 Öğrenme İstatistikleri:")
+    print("\n Öğrenme İstatistikleri:")
     stats = scheduler.get_statistics()
     for key, value in stats.items():
         print(f"  {key}: {value}")
