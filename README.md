@@ -90,26 +90,30 @@ python src/main.py --mode hybrid --workload large_matrix
 
 
 Green-Tensor-Core/
-├── src/
-│   ├── components/       # CPU, PIM, Memory models
-│   ├── scheduler/        # Task offloading logic
-│   ├── analysis/         # Energy profiling tools
-│   └── main.py           # Entry point
-├── notebooks/            # Visualization & analysis notebooks
-├── docs/                 # Diagrams and references
-├── tests/                # Unit tests
-├── requirements.txt
-└── README.md
+├── PIM SIMULATOR/
+│   ├── Q_Learning/                 # Q-Learning based scheduling utilities
+│   │   ├── (Q_Learning içerikleri) # Q-learning scripts & helpers
+│   │
+│   ├── adaptive_scheduler.py       # Adaptive scheduler module
+│   ├── baseline_models.py          # Baseline (CPU-only) models
+│   ├── hybrid_scheduler.py         # Hybrid CPU + PIM scheduler logic
+│   ├── pim_simulator.py            # Core processing-in-memory simulation engine
+│   ├── adaptive_precision.py       # Precision/energy trade-off experiments
+│   ├── test_simulator.py           # Simulation tests & benchmarks
+│   └── visualize_scheduler.py      # Visualization tools for scheduler behavior
+├── README.md                       # Project overview and docs
+└── requirements.txt                # Python dependencies
 
+```
 
-🤝 Contact & Acknowledgements
+###Contact & Acknowledgements
 
-Developer: Muhammed Buğra Demirbaş
-Context: Developed for Tomorrow's Technology Leaders (Sustainability Track).
+- **Developer: Muhammed Buğra Demirbaş
+- **Context: Developed for Tomorrow's Technology Leaders (Sustainability Track).
 
-LinkedIn: https://www.linkedin.com/in/m-bugra-demirbas/
+- **LinkedIn: https://www.linkedin.com/in/m-bugra-demirbas/
 
-Email: mbugrademirbas@gmail.com
+- **Email: mbugrademirbas@gmail.com
 
 
 
