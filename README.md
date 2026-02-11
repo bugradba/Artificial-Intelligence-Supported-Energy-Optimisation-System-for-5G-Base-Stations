@@ -106,6 +106,26 @@ Green-Tensor-Core/
 
 ```
 
+
+## 🏗️ Sistem Mimarisi (System Architecture)
+
+Projenin nihai donanım ve yazılım mimarisi, heterojen bir hesaplama yapısı üzerine kurulmuştur. Sistem, **CPU** ve **PIM (Processing-in-Memory)** birimleri arasındaki yük dağılımını yöneten **Q-Learning tabanlı Akıllı Hibrit Zamanlayıcı** (Smart Hybrid Scheduler) tarafından kontrol edilmektedir.
+
+Aşağıdaki mimari şema, bu entegrasyonun detaylarını göstermektedir:
+
+<p align="center">
+  <img src="System Architecture.png" alt="Önerilen Akıllı Hibrit Zamanlayıcı ve PIM Mimarisi" width="800">
+</p>
+
+### ⚙️ Çalışma Mantığı
+Zamanlayıcı, bellek darboğazını (Memory Wall) aşmak için görevleri dinamik olarak analiz eder ve aşağıdaki mantığa göre yönlendirir:
+
+```math
+IF (\text{data\_intensive}) \rightarrow \text{PIM (Processing-in-Memory)}
+ELSE \rightarrow \text{CPU (Host Processor)}
+
+
+
 ###Contact & Acknowledgements
 
 - **Developer: Muhammed Buğra Demirbaş
