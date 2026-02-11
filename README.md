@@ -117,10 +117,9 @@ The architectural diagram below illustrates the details of this integration:
   <img src="System Architecture.png" alt="Proposed Smart Hybrid Scheduler and PIM Architecture" width="800">
 </p>
 
-### ⚙️ Operational Logic
+###  Operational Logic
 To overcome the **Memory Wall** bottleneck, the scheduler dynamically analyzes tasks (profiling) and routes them based on the following logic:
 
-```math
 IF (\text{data\_intensive}) \rightarrow \text{PIM (Processing-in-Memory)}
 ELSE \rightarrow \text{CPU (Host Processor)}
 
